@@ -18,7 +18,7 @@ import { CSV_HEADERS, ideaToCsvRow } from "@/lib/utils";
  *
  * Returns: 200 text/csv with Content-Disposition: attachment
  */
-export async function GET(_request: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
     // Fetch all ideas for the default user, ordered by created_at DESC
     const rows = await db

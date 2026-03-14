@@ -26,12 +26,12 @@ interface IdeaRowProps {
 
 
 
-export function IdeaRow({ idea, onEdit, onDelete, onStatusChange }: IdeaRowProps) {
+export function IdeaRow({ idea, onEdit, onDelete, onStatusChange: _onStatusChange }: IdeaRowProps) {
   const router = useRouter();
   const { addToast } = useToast();
 
   // ── Status optimistic state (via shared hook) ──────────────────────────────
-  const [localStatus, applyOptimisticStatus, setLocalStatus] = useOptimisticUpdate<Status>(
+  const [localStatus, applyOptimisticStatus, _setLocalStatus] = useOptimisticUpdate<Status>(
     idea.status as Status
   );
   const [isStatusLoading, setIsStatusLoading] = useState(false);
