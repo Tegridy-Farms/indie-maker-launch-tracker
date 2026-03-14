@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { NavBar } from "@/components/NavBar";
 import { ToastProvider } from "@/components/Toast";
+import { AppShellWithContext } from "@/components/AppShell";
 import "./globals.css";
 
 const inter = Inter({
@@ -24,8 +24,9 @@ export default function RootLayout({
     <html lang="en" className={inter.variable}>
       <body className="bg-bg-app text-text-primary min-h-screen">
         <ToastProvider>
-          <NavBar />
-          <main>{children}</main>
+          <AppShellWithContext>
+            {children}
+          </AppShellWithContext>
         </ToastProvider>
       </body>
     </html>

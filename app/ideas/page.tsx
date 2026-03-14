@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { ideas } from "@/db/schema";
 import { desc, eq, count } from "drizzle-orm";
 import { IdeasListClient } from "./IdeasListClient";
+import { NewIdeaButton } from "@/components/NewIdeaButton";
 import type { Idea } from "@/types/idea";
 
 /**
@@ -38,6 +39,7 @@ export default async function IdeasPage() {
       {/* Page heading */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-[24px] font-bold text-text-primary">My Ideas</h1>
+        <NewIdeaButton />
       </div>
 
       {/* Client component handles search/filter/sort/display */}

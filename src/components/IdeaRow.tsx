@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   PencilIcon,
@@ -23,6 +23,9 @@ interface IdeaRowProps {
   onDelete?: (idea: Idea) => void;
   onStatusChange?: (id: string, newStatus: Status) => Promise<void>;
 }
+
+// Fallback no-op to avoid crashes when onEdit is not wired yet
+const defaultOnEdit = (_idea: Idea) => {};
 
 export function IdeaRow({ idea, onEdit, onDelete, onStatusChange }: IdeaRowProps) {
   const router = useRouter();

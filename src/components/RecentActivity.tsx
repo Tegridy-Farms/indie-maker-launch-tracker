@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { StatusBadge } from "./StatusBadge";
 import { EmptyState } from "./EmptyState";
+import { useDrawer } from "@/components/AppShell";
 import { formatRelativeTime } from "@/lib/utils";
 import type { Idea } from "@/types/idea";
 import type { Status } from "@/lib/validators";
@@ -16,6 +19,8 @@ export function RecentActivity({
   isLoading = false,
   isError = false,
 }: RecentActivityProps) {
+  const { openEdit, openCreate } = useDrawer();
+
   return (
     <div className="bg-surface rounded-xl border border-border-default p-6">
       {/* Header */}
@@ -53,7 +58,7 @@ export function RecentActivity({
       )}
 
       {!isLoading && !isError && ideas.length === 0 && (
-        <EmptyState variant="no-ideas" />
+        <EmptyState variant="no-ideas" onCreateNew={openCreate} />
       )}
 
       {!isLoading && !isError && ideas.length > 0 && (
@@ -64,14 +69,15 @@ export function RecentActivity({
               role="listitem"
               className="flex items-center gap-3 py-3 hover:bg-[#F3F4F6] -mx-2 px-2 rounded transition-colors"
             >
-              {/* Title */}
-              <Link
-                href={`/ideas`}
-                className="flex-1 min-w-0 text-[14px] font-medium text-text-primary hover:text-primary truncate transition-colors"
+              {/* Title — clicking opens IdeaFormDrawer in edit mode */}
+              <button
+                type="button"
+                onClick={() => openEdit(idea)}
+                className="flex-1 min-w-0 text-[14px] font-medium text-text-primary hover:text-primary truncate transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 rounded"
                 title={idea.title}
               >
                 {idea.title}
-              </Link>
+              </button>
 
               {/* Status badge */}
               <StatusBadge
