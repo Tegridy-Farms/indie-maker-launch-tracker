@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, createContext, useContext } from "react";
+import { useRouter } from "next/navigation";
 import { NavBar } from "@/components/NavBar";
 import { IdeaFormDrawer } from "@/components/IdeaFormDrawer";
 import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
@@ -42,6 +43,7 @@ interface AppShellProps {
  *    can call openEdit() / openCreate() directly.
  */
 export function AppShellWithContext({ children }: AppShellProps) {
+  const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<"create" | "edit">("create");
   const [editIdea, setEditIdea] = useState<Partial<Idea> | undefined>(undefined);
@@ -62,6 +64,10 @@ export function AppShellWithContext({ children }: AppShellProps) {
     setDrawerOpen(false);
   }, []);
 
+  const handleSuccess = useCallback(() => {
+    router.refresh();
+  }, [router]);
+
   // Keyboard shortcut: N opens create-mode drawer (only when not in an input
   // and the drawer is not already open)
   useKeyboardShortcut("n", openCreate, !drawerOpen);
@@ -74,6 +80,7 @@ export function AppShellWithContext({ children }: AppShellProps) {
       <IdeaFormDrawer
         isOpen={drawerOpen}
         onClose={handleClose}
+        onSuccess={handleSuccess}
         mode={drawerMode}
         initialValues={editIdea}
       />
