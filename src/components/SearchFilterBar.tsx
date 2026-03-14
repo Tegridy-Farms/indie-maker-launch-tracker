@@ -13,7 +13,7 @@ type SortOption = "newest" | "recently-updated" | "title-asc";
 interface SearchFilterBarProps {
   ideas: Idea[];
   onEdit: (idea: Idea) => void;
-  onDelete: (idea: Idea) => void;
+  onDelete?: (idea: Idea) => void;
   onStatusChange?: (id: string, newStatus: Status) => Promise<void>;
   total: number;
   page: number;
