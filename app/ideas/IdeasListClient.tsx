@@ -17,24 +17,21 @@ export function IdeasListClient({ initialIdeas, initialTotal }: IdeasListClientP
   const [total] = useState(initialTotal);
   const [page, setPage] = useState(1);
 
-  // Placeholder handlers — wired fully in Stage 5 & 6
+  // Edit handler — wired fully in Stage 6 (IdeaFormDrawer)
   const handleEdit = (_idea: Idea) => {
     // TODO: Stage 6 — open IdeaFormDrawer in edit mode
   };
 
-  const handleDelete = (_idea: Idea) => {
-    // TODO: Stage 5 — open ConfirmDialog
-  };
-
+  // Status change is handled inline within IdeaRow (optimistic PATCH)
+  // This prop is kept for SearchFilterBar compatibility but IdeaRow owns the actual mutation
   const handleStatusChange = async (_id: string, _newStatus: Status): Promise<void> => {
-    // TODO: Stage 5 — optimistic PATCH
+    // IdeaRow handles optimistic PATCH directly — no-op here
   };
 
   return (
     <SearchFilterBar
       ideas={ideas}
       onEdit={handleEdit}
-      onDelete={handleDelete}
       onStatusChange={handleStatusChange}
       total={total}
       page={page}
