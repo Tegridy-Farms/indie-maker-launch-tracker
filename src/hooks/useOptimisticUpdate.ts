@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 
 /**
  * useOptimisticUpdate — reusable optimistic-state + revert helper.
@@ -11,22 +11,29 @@ import { useState, useCallback } from "react";
  */
 export function useOptimisticUpdate<T>(
   initialValue: T
-): [T, (newValue: T, action: () => Promise<void>) => Promise<void>] {
+): [T, (newValue: T, action: () => Promise<void>) => Promise<void>, (v: T) => void] {
   const [value, setValue] = useState<T>(initialValue);
+  // Use a ref to always capture the latest value without stale-closure issues
+  const valueRef = useRef<T>(initialValue);
+
+  const set = useCallback((v: T) => {
+    valueRef.current = v;
+    setValue(v);
+  }, []);
 
   const applyOptimistic = useCallback(
     async (newValue: T, action: () => Promise<void>) => {
-      const previous = value;
-      setValue(newValue);
+      const previous = valueRef.current;
+      set(newValue);
       try {
         await action();
       } catch {
-        setValue(previous);
+        set(previous);
         throw new Error("optimistic_revert");
       }
     },
-    [value]
+    [set]
   );
 
-  return [value, applyOptimistic];
+  return [value, applyOptimistic, set];
 }

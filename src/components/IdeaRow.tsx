@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   PencilIcon,
@@ -12,6 +12,7 @@ import { StatusDropdown } from "@/components/StatusDropdown";
 import { TagChip } from "@/components/TagChip";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useToast } from "@/components/Toast";
+import { useOptimisticUpdate } from "@/hooks/useOptimisticUpdate";
 import { formatDate } from "@/lib/utils";
 import type { Idea } from "@/types/idea";
 import type { Status } from "@/lib/validators";
@@ -27,11 +28,12 @@ export function IdeaRow({ idea, onEdit, onDelete, onStatusChange }: IdeaRowProps
   const router = useRouter();
   const { addToast } = useToast();
 
-  // ── Status optimistic state ────────────────────────────────────────────────
-  const [localStatus, setLocalStatus] = useState<Status>(idea.status as Status);
+  // ── Status optimistic state (via shared hook) ──────────────────────────────
+  const [localStatus, applyOptimisticStatus, setLocalStatus] = useOptimisticUpdate<Status>(
+    idea.status as Status
+  );
   const [isStatusLoading, setIsStatusLoading] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const previousStatusRef = useRef<Status>(idea.status as Status);
 
   const handleStatusSelect = useCallback(
     async (newStatus: Status) => {
@@ -40,42 +42,41 @@ export function IdeaRow({ idea, onEdit, onDelete, onStatusChange }: IdeaRowProps
         return;
       }
 
-      const previous = localStatus;
-      previousStatusRef.current = previous;
-
-      // Optimistic update
-      setLocalStatus(newStatus);
       setDropdownOpen(false);
       setIsStatusLoading(true);
 
       try {
-        const res = await fetch(`/api/ideas/${idea.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: newStatus }),
+        await applyOptimisticStatus(newStatus, async () => {
+          const res = await fetch(`/api/ideas/${idea.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: newStatus }),
+          });
+
+          if (!res.ok) {
+            throw new Error(`PATCH failed: ${res.status}`);
+          }
+
+          // Sync server state for dashboard counts
+          router.refresh();
         });
-
-        if (!res.ok) {
-          throw new Error(`PATCH failed: ${res.status}`);
-        }
-
-        // Sync server state for dashboard counts
-        router.refresh();
       } catch {
-        // Revert
-        setLocalStatus(previous);
+        // Hook already reverted; show toast
         addToast("error", "Couldn't update status. Try again.");
       } finally {
         setIsStatusLoading(false);
       }
     },
-    [localStatus, idea.id, router, addToast]
+    [localStatus, applyOptimisticStatus, idea.id, router, addToast]
   );
 
-  // ── Delete optimistic state ────────────────────────────────────────────────
-  const [isDeleted, setIsDeleted] = useState(false);
+  // ── Delete optimistic state (via shared hook) ──────────────────────────────
+  // We track deleted state as a boolean; optimistic hook wraps it.
+  const [isDeleted, applyOptimisticDelete] = useOptimisticUpdate<boolean>(false);
+  const [isAnimatingOut, setIsAnimatingOut] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const rowRef = useRef<HTMLLIElement>(null);
 
   const handleDeleteClick = useCallback(() => {
     setConfirmOpen(true);
@@ -83,59 +84,73 @@ export function IdeaRow({ idea, onEdit, onDelete, onStatusChange }: IdeaRowProps
 
   const handleDeleteConfirm = useCallback(async () => {
     setIsDeleteLoading(true);
-
-    // Optimistic: fade out row
-    setIsDeleted(true);
     setConfirmOpen(false);
 
+    // Step 1: animate the row out (fade + collapse) for 250ms before removal
+    setIsAnimatingOut(true);
+    await new Promise<void>((resolve) => setTimeout(resolve, 260));
+
     try {
-      const res = await fetch(`/api/ideas/${idea.id}`, {
-        method: "DELETE",
-      });
+      await applyOptimisticDelete(true, async () => {
+        const res = await fetch(`/api/ideas/${idea.id}`, {
+          method: "DELETE",
+        });
 
-      if (res.status === 404) {
-        // Already gone — show informational, row stays removed
-        addToast("info", "That idea was already removed.");
+        if (res.status === 404) {
+          // Already gone — informational toast, row stays removed
+          addToast("info", "That idea was already removed.");
+          router.refresh();
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error(`DELETE failed: ${res.status}`);
+        }
+
+        addToast("success", "Idea deleted");
         router.refresh();
-        return;
-      }
-
-      if (!res.ok) {
-        throw new Error(`DELETE failed: ${res.status}`);
-      }
-
-      addToast("success", "Idea deleted.");
-      router.refresh();
+      });
     } catch {
-      // Revert row back
-      setIsDeleted(false);
+      // Hook reverted isDeleted → false; undo animation
+      setIsAnimatingOut(false);
       addToast("error", "Couldn't delete idea. Try again.");
     } finally {
       setIsDeleteLoading(false);
     }
-  }, [idea.id, router, addToast]);
+  }, [applyOptimisticDelete, idea.id, router, addToast]);
 
   const handleDeleteCancel = useCallback(() => {
     setConfirmOpen(false);
   }, []);
 
-  // ── If row is deleted, collapse it out ─────────────────────────────────────
+  // ── If row is fully deleted (after animation), render nothing ─────────────
   if (isDeleted) {
-    return (
-      <li
-        role="listitem"
-        aria-hidden="true"
-        className="overflow-hidden transition-all duration-[250ms] ease-in"
-        style={{ opacity: 0, maxHeight: 0, padding: 0, margin: 0 }}
-      />
-    );
+    return null;
   }
 
   return (
     <>
       <li
+        ref={rowRef}
         role="listitem"
         className="group flex items-center gap-3 px-4 py-0 min-h-[56px] border-b border-border-default hover:bg-[#F3F4F6] transition-colors relative"
+        style={
+          isAnimatingOut
+            ? {
+                opacity: 0,
+                maxHeight: 0,
+                minHeight: 0,
+                paddingTop: 0,
+                paddingBottom: 0,
+                overflow: "hidden",
+                transition: "opacity 250ms ease-in, max-height 250ms ease-in",
+              }
+            : {
+                opacity: 1,
+                maxHeight: "200px",
+                transition: "opacity 250ms ease-in, max-height 250ms ease-in",
+              }
+        }
       >
         {/* Title (flex-grow) */}
         <div className="flex-1 min-w-0">
@@ -180,6 +195,7 @@ export function IdeaRow({ idea, onEdit, onDelete, onStatusChange }: IdeaRowProps
             status={localStatus}
             interactive={true}
             size="md"
+            isExpanded={dropdownOpen}
             onClick={() => setDropdownOpen((prev) => !prev)}
             isLoading={isStatusLoading}
           />
@@ -220,8 +236,9 @@ export function IdeaRow({ idea, onEdit, onDelete, onStatusChange }: IdeaRowProps
           </time>
         </div>
 
-        {/* Actions (64px): Edit + Delete */}
-        <div className="flex-shrink-0 w-[64px] flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 sm:transition-opacity sm:duration-100 sm:ease-in-out focus-within:opacity-100">
+        {/* Actions (64px): Edit + Delete
+            Always visible on mobile; hover-reveal only on md+ (desktop). */}
+        <div className="flex-shrink-0 w-[64px] flex items-center gap-1 justify-end md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 md:transition-opacity md:duration-100 md:ease-in-out">
           <button
             type="button"
             onClick={() => onEdit(idea)}
@@ -244,8 +261,8 @@ export function IdeaRow({ idea, onEdit, onDelete, onStatusChange }: IdeaRowProps
       {/* Confirm delete dialog */}
       <ConfirmDialog
         isOpen={confirmOpen}
-        title={`Delete "${idea.title}"?`}
-        body="This cannot be undone. The idea and all its details will be permanently removed."
+        title={`Delete '${idea.title}'? This cannot be undone.`}
+        body="The idea and all its details will be permanently removed."
         confirmLabel="Delete"
         isLoading={isDeleteLoading}
         onConfirm={handleDeleteConfirm}

@@ -9,6 +9,8 @@ interface StatusBadgeProps {
   size?: "sm" | "md";
   onClick?: () => void;
   isLoading?: boolean;
+  /** When used as dropdown trigger, pass the open state so aria-expanded is correct. */
+  isExpanded?: boolean;
 }
 
 export function StatusBadge({
@@ -17,6 +19,7 @@ export function StatusBadge({
   size = "md",
   onClick,
   isLoading = false,
+  isExpanded,
 }: StatusBadgeProps) {
   const label = STATUS_LABELS[status];
   const bgColor = STATUS_COLOURS[status];
@@ -30,7 +33,8 @@ export function StatusBadge({
         type="button"
         role="button"
         aria-label={`Change status: ${label}`}
-        aria-expanded={undefined}
+        aria-expanded={isExpanded !== undefined ? isExpanded : undefined}
+        aria-haspopup="listbox"
         onClick={onClick}
         className={`relative inline-flex items-center gap-1.5 rounded-full font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${sizeClasses}`}
         style={{ backgroundColor: bgColor }}
