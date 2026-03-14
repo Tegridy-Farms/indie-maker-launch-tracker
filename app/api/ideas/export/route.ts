@@ -7,10 +7,15 @@ import { CSV_HEADERS, ideaToCsvRow } from "@/lib/utils";
 /**
  * GET /api/ideas/export
  *
- * Streams all ideas for user_id = 'default' as a CSV download.
+ * Returns all ideas for user_id = 'default' as a CSV download.
  * Headers: title,description,status,tags,url,created_at,updated_at
  *
- * Uses a streaming response to avoid buffering large datasets in memory.
+ * NOTE: All matching rows are fetched into memory before the ReadableStream
+ * is constructed.  The response body is still transferred as a stream, but
+ * the full dataset is buffered server-side first.  This is acceptable for
+ * the MVP scale (single-user, bounded idea count).  For large datasets a
+ * true cursor/row-by-row streaming approach should be adopted.
+ *
  * Returns: 200 text/csv with Content-Disposition: attachment
  */
 export async function GET(_request: NextRequest) {

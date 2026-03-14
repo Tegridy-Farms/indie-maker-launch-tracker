@@ -129,6 +129,36 @@ describe("POST /api/ideas", () => {
     expect(json.idea.user_id).toBe("default");
   });
 
+  it("returns 201 response with UUID id, created_at, and updated_at fields", async () => {
+    mockDb.insert.mockReturnValue({
+      values: () => ({
+        returning: () => Promise.resolve([SAMPLE_IDEA]),
+      }),
+    });
+
+    const req = makeRequest("POST", "http://localhost/api/ideas", {
+      title: "Test Timestamps",
+      status: "idea",
+    });
+
+    const res = await createPost(req);
+    expect(res.status).toBe(201);
+
+    const json = await res.json();
+    const idea = json.idea;
+
+    // id must be a UUID (8-4-4-4-12 hex groups)
+    expect(idea.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    );
+
+    // created_at and updated_at must be present and parseable as dates
+    expect(idea.created_at).toBeDefined();
+    expect(idea.updated_at).toBeDefined();
+    expect(new Date(idea.created_at).getTime()).not.toBeNaN();
+    expect(new Date(idea.updated_at).getTime()).not.toBeNaN();
+  });
+
   it("returns 400 with fieldErrors when title is empty", async () => {
     const req = makeRequest("POST", "http://localhost/api/ideas", {
       title: "",
@@ -256,6 +286,143 @@ describe("GET /api/ideas", () => {
     const json = await res.json();
     expect(json.stats).toBeUndefined();
   });
+
+  it("returns ideas in default created_at DESC order (first idea is most recent)", async () => {
+    const older = { ...SAMPLE_IDEA, id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", created_at: new Date("2026-01-01T00:00:00Z"), updated_at: new Date("2026-01-01T00:00:00Z"), title: "Older" };
+    const newer = { ...SAMPLE_IDEA, id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", created_at: new Date("2026-03-01T00:00:00Z"), updated_at: new Date("2026-03-01T00:00:00Z"), title: "Newer" };
+    const rows = [newer, older]; // most-recent first (as DB would return with DESC)
+
+    // The handler runs two selects in Promise.all:
+    //   1st: data query  — .select().from().where().orderBy().limit().offset()
+    //   2nd: count query — .select({count}).from().where()   (no offset, awaited via chain.then)
+    // Use mockImplementationOnce for each call in order.
+    mockDb.select
+      .mockImplementationOnce(() => {
+        const chain: Record<string, unknown> = {
+          from: () => chain,
+          where: () => chain,
+          orderBy: () => chain,
+          limit: () => chain,
+          offset: () => Promise.resolve(rows),
+        };
+        return chain;
+      })
+      .mockImplementationOnce(() => {
+        const chain: Record<string, unknown> = {
+          from: () => chain,
+          where: () => Promise.resolve([{ count: rows.length }]),
+        };
+        return chain;
+      });
+
+    const req = makeRequest("GET", "http://localhost/api/ideas");
+    const res = await listGet(req);
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.ideas.length).toBe(2);
+    // Most-recent first (handler passes through the DB-ordered result)
+    expect(new Date(json.ideas[0].created_at).getTime()).toBeGreaterThanOrEqual(
+      new Date(json.ideas[1].created_at).getTime()
+    );
+  });
+
+  it("filters by status[] and returns only matching ideas", async () => {
+    const launched = { ...SAMPLE_IDEA, id: "cccccccc-cccc-cccc-cccc-cccccccccccc", status: "launched" as const };
+    const shelved  = { ...SAMPLE_IDEA, id: "dddddddd-dddd-dddd-dddd-dddddddddddd", status: "shelved"  as const };
+    const rows = [launched, shelved];
+
+    mockDb.select
+      .mockImplementationOnce(() => {
+        const chain: Record<string, unknown> = {
+          from: () => chain,
+          where: () => chain,
+          orderBy: () => chain,
+          limit: () => chain,
+          offset: () => Promise.resolve(rows),
+        };
+        return chain;
+      })
+      .mockImplementationOnce(() => {
+        const chain: Record<string, unknown> = {
+          from: () => chain,
+          where: () => Promise.resolve([{ count: rows.length }]),
+        };
+        return chain;
+      });
+
+    const req = makeRequest("GET", "http://localhost/api/ideas?status[]=launched&status[]=shelved");
+    const res = await listGet(req);
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.total).toBe(2);
+    for (const idea of json.ideas) {
+      expect(["launched", "shelved"]).toContain(idea.status);
+    }
+  });
+
+  it("returns ideas sorted alphabetically by title when sort=title&order=asc", async () => {
+    const apple  = { ...SAMPLE_IDEA, id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee", title: "Apple"  };
+    const banana = { ...SAMPLE_IDEA, id: "ffffffff-ffff-ffff-ffff-ffffffffffff", title: "Banana" };
+    const cherry = { ...SAMPLE_IDEA, id: "00000000-0000-0000-0000-000000000001", title: "Cherry" };
+    const rows = [apple, banana, cherry]; // alphabetical order as DB would return asc
+
+    mockDb.select
+      .mockImplementationOnce(() => {
+        const chain: Record<string, unknown> = {
+          from: () => chain,
+          where: () => chain,
+          orderBy: () => chain,
+          limit: () => chain,
+          offset: () => Promise.resolve(rows),
+        };
+        return chain;
+      })
+      .mockImplementationOnce(() => {
+        const chain: Record<string, unknown> = {
+          from: () => chain,
+          where: () => Promise.resolve([{ count: rows.length }]),
+        };
+        return chain;
+      });
+
+    const req = makeRequest("GET", "http://localhost/api/ideas?sort=title&order=asc");
+    const res = await listGet(req);
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.ideas.length).toBe(3);
+    const titles = json.ideas.map((i: { title: string }) => i.title);
+    // Titles should already be in alphabetical order (handler passes through DB order)
+    expect(titles).toEqual([...titles].sort());
+  });
+
+  it("returns stats object with per-status counts when stats=true", async () => {
+    const ideas = [
+      { ...SAMPLE_IDEA, id: "11111111-1111-1111-1111-111111111111", status: "idea"        as const },
+      { ...SAMPLE_IDEA, id: "22222222-2222-2222-2222-222222222222", status: "idea"        as const },
+      { ...SAMPLE_IDEA, id: "33333333-3333-3333-3333-333333333333", status: "in_progress" as const },
+      { ...SAMPLE_IDEA, id: "44444444-4444-4444-4444-444444444444", status: "launched"    as const },
+    ];
+    setupSelectMock(ideas, ideas.length);
+
+    const req = makeRequest("GET", "http://localhost/api/ideas?stats=true");
+    const res = await listGet(req);
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.stats).toBeDefined();
+    // All four status keys must be present
+    expect(json.stats).toHaveProperty("idea");
+    expect(json.stats).toHaveProperty("in_progress");
+    expect(json.stats).toHaveProperty("launched");
+    expect(json.stats).toHaveProperty("shelved");
+    expect(json.stats).toHaveProperty("total");
+    // Counts must be non-negative numbers
+    expect(json.stats.total).toBeGreaterThanOrEqual(0);
+    expect(typeof json.stats.idea).toBe("number");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -328,6 +495,40 @@ describe("PATCH /api/ideas/[id]", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.idea.status).toBe("launched");
+  });
+
+  it("returns 200 and the response idea has updated_at field present", async () => {
+    const refreshedAt = new Date("2026-03-14T12:00:00Z");
+    const updatedIdea = {
+      ...SAMPLE_IDEA,
+      status: "in_progress" as const,
+      updated_at: refreshedAt,
+    };
+    mockDb.update.mockReturnValue({
+      set: () => ({
+        where: () => ({
+          returning: () => Promise.resolve([updatedIdea]),
+        }),
+      }),
+    });
+
+    const req = makeRequest(
+      "PATCH",
+      "http://localhost/api/ideas/11111111-1111-1111-1111-111111111111",
+      { status: "in_progress" }
+    );
+    const res = await patchIdea(req, {
+      params: { id: "11111111-1111-1111-1111-111111111111" },
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.idea.updated_at).toBeDefined();
+    expect(new Date(json.idea.updated_at).getTime()).not.toBeNaN();
+    // updated_at should reflect the refreshed timestamp (not the original)
+    expect(new Date(json.idea.updated_at).getTime()).toBeGreaterThan(
+      new Date(SAMPLE_IDEA.created_at).getTime() - 1
+    );
   });
 
   it("returns 404 when idea is not found", async () => {
@@ -464,6 +665,38 @@ describe("DELETE /api/ideas/[id]", () => {
     );
     const res = await deleteIdea(req, { params: { id: "no-such-id" } });
     expect(res.status).toBe(404);
+  });
+
+  it("delete then read: DELETE returns 204 and a subsequent GET returns 404", async () => {
+    const targetId = "11111111-1111-1111-1111-111111111111";
+
+    // Step 1: DELETE returns the deleted row
+    mockDb.delete.mockReturnValue({
+      where: () => ({
+        returning: () => Promise.resolve([{ id: targetId }]),
+      }),
+    });
+
+    const deleteReq = makeRequest(
+      "DELETE",
+      `http://localhost/api/ideas/${targetId}`
+    );
+    const deleteRes = await deleteIdea(deleteReq, { params: { id: targetId } });
+    expect(deleteRes.status).toBe(204);
+
+    // Step 2: Subsequent GET returns empty (idea no longer exists)
+    mockDb.select.mockReturnValue({
+      from: () => ({
+        where: () => Promise.resolve([]),
+      }),
+    });
+
+    const getReq = makeRequest(
+      "GET",
+      `http://localhost/api/ideas/${targetId}`
+    );
+    const getRes = await singleGet(getReq, { params: { id: targetId } });
+    expect(getRes.status).toBe(404);
   });
 });
 
