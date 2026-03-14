@@ -43,7 +43,7 @@ export function SearchFilterBar({
   onEdit,
   onDelete,
   onStatusChange,
-  total,
+  total: _total,
   page,
   onPageChange,
   pageSize,
