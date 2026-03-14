@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
+import { useDrawer } from "@/components/AppShell";
 import type { Idea } from "@/types/idea";
 import type { Status } from "@/lib/validators";
 
@@ -17,13 +18,15 @@ export function IdeasListClient({ initialIdeas, initialTotal }: IdeasListClientP
   const [total] = useState(initialTotal);
   const [page, setPage] = useState(1);
 
-  // Edit handler — wired fully in Stage 6 (IdeaFormDrawer)
-  const handleEdit = (_idea: Idea) => {
-    // TODO: Stage 6 — open IdeaFormDrawer in edit mode
+  // Open the IdeaFormDrawer from the layout-level AppShell context
+  const { openEdit } = useDrawer();
+
+  // Edit handler — opens IdeaFormDrawer in edit mode with this idea's data
+  const handleEdit = (idea: Idea) => {
+    openEdit(idea);
   };
 
   // Status change is handled inline within IdeaRow (optimistic PATCH)
-  // This prop is kept for SearchFilterBar compatibility but IdeaRow owns the actual mutation
   const handleStatusChange = async (_id: string, _newStatus: Status): Promise<void> => {
     // IdeaRow handles optimistic PATCH directly — no-op here
   };
