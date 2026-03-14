@@ -53,6 +53,12 @@ export function SearchFilterBar({
 
   const debouncedSearch = useDebounce(search, 200);
 
+  // Reset to page 1 whenever filters/sort change
+  useEffect(() => {
+    onPageChange(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, selectedStatuses, sort]);
+
   const hasActiveFilters =
     debouncedSearch !== "" || selectedStatuses.length > 0 || sort !== "newest";
 
@@ -60,7 +66,8 @@ export function SearchFilterBar({
     setSearch("");
     setSelectedStatuses([]);
     setSort("newest");
-  }, []);
+    onPageChange(1);
+  }, [onPageChange]);
 
   const toggleStatus = useCallback((status: Status) => {
     setSelectedStatuses((prev) =>
@@ -105,7 +112,13 @@ export function SearchFilterBar({
     return result;
   }, [ideas, debouncedSearch, selectedStatuses, sort]);
 
-  const totalPages = Math.ceil(total / pageSize);
+  const totalPages = Math.ceil(filtered.length / pageSize);
+
+  // Paginate the filtered+sorted results
+  const paginatedIdeas = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
 
   return (
     <div>
@@ -235,36 +248,37 @@ export function SearchFilterBar({
           onClear={ideas.length > 0 ? clearFilters : undefined}
         />
       ) : (
-        <ul
-          role="list"
-          aria-live="polite"
-          aria-label="Ideas list"
-          className="bg-surface rounded-xl border border-border-default overflow-hidden"
-        >
-          {/* Column headers (hidden on mobile) */}
-          <li className="hidden sm:flex items-center gap-3 px-4 py-2 border-b border-border-default bg-[#F9FAFB]">
+        <div className="bg-surface rounded-xl border border-border-default overflow-hidden">
+          {/* Column headers (hidden on mobile) — must NOT be inside <ul> */}
+          <div className="hidden sm:flex items-center gap-3 px-4 py-2 border-b border-border-default bg-[#F9FAFB]" aria-hidden="true">
             <div className="flex-1 text-[12px] font-medium text-text-secondary">Title</div>
             <div className="w-[200px] flex-shrink-0 text-[12px] font-medium text-text-secondary">Tags</div>
-            <div className="w-6 flex-shrink-0" aria-hidden="true" />
+            <div className="w-6 flex-shrink-0" />
             <div className="w-[120px] flex-shrink-0 text-[12px] font-medium text-text-secondary">Status</div>
             <div className="w-[96px] flex-shrink-0 text-[12px] font-medium text-text-secondary">Created</div>
-            <div className="w-[64px] flex-shrink-0" aria-hidden="true" />
-          </li>
+            <div className="w-[64px] flex-shrink-0" />
+          </div>
 
-          {filtered.map((idea) => (
-            <IdeaRow
-              key={idea.id}
-              idea={idea}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onStatusChange={onStatusChange}
-            />
-          ))}
-        </ul>
+          <ul
+            role="list"
+            aria-live="polite"
+            aria-label="Ideas list"
+          >
+            {paginatedIdeas.map((idea) => (
+              <IdeaRow
+                key={idea.id}
+                idea={idea}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onStatusChange={onStatusChange}
+              />
+            ))}
+          </ul>
+        </div>
       )}
 
       {/* Pagination */}
-      {total > pageSize && (
+      {filtered.length > pageSize && (
         <div className="flex items-center justify-center gap-2 mt-6">
           <button
             type="button"
