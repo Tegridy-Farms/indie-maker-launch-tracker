@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { MagnifyingGlassIcon, XMarkIcon, FunnelIcon } from "@heroicons/react/20/solid";
 import { STATUS_LABELS, STATUS_COLOURS } from "@/lib/constants";
 import { EmptyState } from "@/components/EmptyState";
+import { ExportButton } from "@/components/ExportButton";
 import { IdeaRow } from "@/components/IdeaRow";
 import type { Idea } from "@/types/idea";
 import type { Status } from "@/lib/validators";
@@ -223,6 +224,11 @@ export function SearchFilterBar({
             Clear Filters
           </button>
         )}
+
+        {/* Export CSV button — desktop: far right of filter bar */}
+        <div className="ml-auto">
+          <ExportButton />
+        </div>
       </div>
 
       {/* Active filter summary */}
